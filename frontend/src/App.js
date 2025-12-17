@@ -14,7 +14,11 @@ import {
   Check,
   X,
   Shield,
-  AlertCircle
+  AlertCircle,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -58,6 +62,8 @@ function App() {
   const [editingEquipo, setEditingEquipo] = useState(null);
   const [serviciosDelDia, setServiciosDelDia] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [sortOrder, setSortOrder] = useState({ clientes: "asc", equipos: "asc" });
 
   const fetchData = useCallback(async () => {
     try {
@@ -171,14 +177,38 @@ function App() {
       
       {/* Header */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
-        <div className="px-4 md:px-6 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3">
+        <div className="px-4 md:px-6 py-3 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3 flex-shrink-0">
             <div className="w-8 h-8 bg-slate-900 rounded-lg flex items-center justify-center">
               <Monitor className="w-4 h-4 text-white" />
             </div>
-            <h1 className="font-heading font-bold text-lg text-slate-900">Mantenimiento Preventivo</h1>
+            <h1 className="font-heading font-bold text-lg text-slate-900 hidden sm:block">Mantenimiento Preventivo</h1>
           </div>
-          <div className="text-sm text-slate-500">
+          
+          {/* Barra de búsqueda */}
+          <div className="flex-1 max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Buscar cliente, equipo o número de serie..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-300"
+                data-testid="search-input"
+              />
+              {searchTerm && (
+                <button 
+                  onClick={() => setSearchTerm("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+          
+          <div className="text-sm text-slate-500 hidden md:block flex-shrink-0">
             {clientes.length} clientes · {equipos.length} equipos
           </div>
         </div>
@@ -258,6 +288,9 @@ function App() {
             <ClientesView 
               clientes={clientes}
               equipos={equipos}
+              searchTerm={searchTerm}
+              sortOrder={sortOrder.clientes}
+              onToggleSort={() => setSortOrder(prev => ({...prev, clientes: prev.clientes === "asc" ? "desc" : "asc"}))}
               onAdd={() => { setEditingCliente(null); setShowClienteModal(true); }}
               onEdit={(cliente) => { setEditingCliente(cliente); setShowClienteModal(true); }}
               onDelete={async (id) => {
@@ -275,6 +308,9 @@ function App() {
             <EquiposView 
               equipos={equipos}
               clientes={clientes}
+              searchTerm={searchTerm}
+              sortOrder={sortOrder.equipos}
+              onToggleSort={() => setSortOrder(prev => ({...prev, equipos: prev.equipos === "asc" ? "desc" : "asc"}))}
               onAdd={() => { setEditingEquipo(null); setShowEquipoModal(true); }}
               onEdit={(equipo) => { setEditingEquipo(equipo); setShowEquipoModal(true); }}
               onDelete={async (id) => {
@@ -501,15 +537,29 @@ function CalendarioView({ currentDate, servicios, proximosServicios, onPrevMonth
 }
 
 // ==================== CLIENTES VIEW ====================
-function ClientesView({ clientes, equipos, onAdd, onEdit, onDelete }) {
+function ClientesView({ clientes, equipos, searchTerm, sortOrder, onToggleSort, onAdd, onEdit, onDelete }) {
   const getEquiposCount = (clienteId) => {
     return equipos.filter(e => e.cliente_id === clienteId).length;
   };
 
+  // Filtrar por búsqueda
+  const filteredClientes = clientes.filter(cliente => 
+    cliente.nombre.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  // Ordenar alfabéticamente
+  const sortedClientes = [...filteredClientes].sort((a, b) => {
+    const comparison = a.nombre.localeCompare(b.nombre, 'es');
+    return sortOrder === "asc" ? comparison : -comparison;
+  });
+
   return (
     <div data-testid="clientes-view">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading font-bold text-xl text-slate-900">Clientes</h2>
+        <h2 className="font-heading font-bold text-xl text-slate-900">
+          Clientes
+          {searchTerm && <span className="text-sm font-normal text-slate-500 ml-2">({sortedClientes.length} resultados)</span>}
+        </h2>
         <Button onClick={onAdd} className="btn-primary" data-testid="add-cliente-btn">
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Cliente
@@ -524,18 +574,32 @@ function ClientesView({ clientes, equipos, onAdd, onEdit, onDelete }) {
             Agregar primer cliente
           </Button>
         </div>
+      ) : sortedClientes.length === 0 ? (
+        <div className="empty-state bg-white rounded-xl border border-slate-200 py-12">
+          <Search className="w-12 h-12 mb-3 opacity-30" />
+          <p className="text-slate-500">No se encontraron clientes con "{searchTerm}"</p>
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <table className="data-table">
             <thead>
               <tr>
-                <th>Nombre</th>
+                <th>
+                  <button 
+                    onClick={onToggleSort}
+                    className="flex items-center gap-1 hover:text-slate-700 transition-colors"
+                    data-testid="sort-clientes-btn"
+                  >
+                    Nombre
+                    {sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                  </button>
+                </th>
                 <th>Equipos</th>
                 <th className="w-24">Acciones</th>
               </tr>
             </thead>
             <tbody>
-              {clientes.map(cliente => (
+              {sortedClientes.map(cliente => (
                 <tr key={cliente.id} data-testid={`cliente-row-${cliente.id}`}>
                   <td className="font-medium">{cliente.nombre}</td>
                   <td>
@@ -573,7 +637,7 @@ function ClientesView({ clientes, equipos, onAdd, onEdit, onDelete }) {
 }
 
 // ==================== EQUIPOS VIEW ====================
-function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
+function EquiposView({ equipos, clientes, searchTerm, sortOrder, onToggleSort, onAdd, onEdit, onDelete }) {
   const getClienteNombre = (clienteId) => {
     const cliente = clientes.find(c => c.id === clienteId);
     return cliente ? cliente.nombre : "Desconocido";
@@ -584,10 +648,28 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
     return p ? p.label : value;
   };
 
+  // Filtrar por búsqueda (modelo, número de serie, o nombre de cliente)
+  const filteredEquipos = equipos.filter(equipo => {
+    const term = searchTerm.toLowerCase();
+    const clienteNombre = getClienteNombre(equipo.cliente_id).toLowerCase();
+    return equipo.modelo.toLowerCase().includes(term) ||
+           equipo.numero_serie.toLowerCase().includes(term) ||
+           clienteNombre.includes(term);
+  });
+
+  // Ordenar alfabéticamente por modelo
+  const sortedEquipos = [...filteredEquipos].sort((a, b) => {
+    const comparison = a.modelo.localeCompare(b.modelo, 'es');
+    return sortOrder === "asc" ? comparison : -comparison;
+  });
+
   return (
     <div data-testid="equipos-view">
       <div className="flex items-center justify-between mb-4">
-        <h2 className="font-heading font-bold text-xl text-slate-900">Equipos</h2>
+        <h2 className="font-heading font-bold text-xl text-slate-900">
+          Equipos
+          {searchTerm && <span className="text-sm font-normal text-slate-500 ml-2">({sortedEquipos.length} resultados)</span>}
+        </h2>
         <Button onClick={onAdd} className="btn-primary" data-testid="add-equipo-btn">
           <Plus className="w-4 h-4 mr-2" />
           Nuevo Equipo
@@ -607,13 +689,27 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
             Agregar primer equipo
           </Button>
         </div>
+      ) : sortedEquipos.length === 0 ? (
+        <div className="empty-state bg-white rounded-xl border border-slate-200 py-12">
+          <Search className="w-12 h-12 mb-3 opacity-30" />
+          <p className="text-slate-500">No se encontraron equipos con "{searchTerm}"</p>
+        </div>
       ) : (
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Modelo</th>
+                  <th>
+                    <button 
+                      onClick={onToggleSort}
+                      className="flex items-center gap-1 hover:text-slate-700 transition-colors"
+                      data-testid="sort-equipos-btn"
+                    >
+                      Modelo
+                      {sortOrder === "asc" ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />}
+                    </button>
+                  </th>
                   <th>No. Serie</th>
                   <th>Cliente</th>
                   <th>Primer Servicio</th>
@@ -623,7 +719,7 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
                 </tr>
               </thead>
               <tbody>
-                {equipos.map(equipo => (
+                {sortedEquipos.map(equipo => (
                   <tr key={equipo.id} data-testid={`equipo-row-${equipo.id}`}>
                     <td className="font-medium">{equipo.modelo}</td>
                     <td className="font-mono text-xs">{equipo.numero_serie}</td>
