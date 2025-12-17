@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import "@/App.css";
 import axios from "axios";
 import { Toaster, toast } from "sonner";
@@ -657,7 +657,7 @@ function ClientesView({ clientes, equipos, searchTerm, sortOrder, onToggleSort, 
 
 // ==================== EQUIPOS VIEW ====================
 function EquiposView({ equipos, clientes, searchTerm, sortOrder, onToggleSort, onAdd, onEdit, onDelete, onImport, onRefresh }) {
-  const fileInputRef = React.useRef(null);
+  const fileInputRef = useRef(null);
   
   const getClienteNombre = (clienteId) => {
     if (!clienteId) return null;
