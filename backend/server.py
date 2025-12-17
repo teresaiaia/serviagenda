@@ -72,8 +72,8 @@ class ServicioDetalle(BaseModel):
 
 # ==================== UTILIDADES ====================
 
-def calcular_proximas_fechas(fecha_inicio: date, periodicidad: str, meses_adelante: int = 12) -> List[date]:
-    """Calcula las próximas fechas de servicio según la periodicidad"""
+def calcular_proximas_fechas(fecha_inicio: date, periodicidad: str, meses_adelante: int = 24) -> List[date]:
+    """Calcula las fechas de servicio según la periodicidad desde fecha_inicio"""
     intervalos = {
         "mensual": 1,
         "bimensual": 2,
@@ -86,11 +86,10 @@ def calcular_proximas_fechas(fecha_inicio: date, periodicidad: str, meses_adelan
     intervalo = intervalos.get(periodicidad, 1)
     fechas = []
     fecha_actual = fecha_inicio
-    fecha_limite = date.today() + relativedelta(months=meses_adelante)
+    fecha_limite = fecha_inicio + relativedelta(months=meses_adelante)
     
     while fecha_actual <= fecha_limite:
-        if fecha_actual >= date.today():
-            fechas.append(fecha_actual)
+        fechas.append(fecha_actual)
         fecha_actual = fecha_actual + relativedelta(months=intervalo)
     
     return fechas
