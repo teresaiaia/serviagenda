@@ -10,6 +10,9 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone, date
 from dateutil.relativedelta import relativedelta
+from fastapi import UploadFile, File
+from io import BytesIO
+import openpyxl
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -36,11 +39,12 @@ class Cliente(ClienteBase):
 class EquipoBase(BaseModel):
     modelo: str
     numero_serie: str
-    cliente_id: str
-    periodicidad: str  # mensual, bimensual, trimestral, cuatrimestral, semestral, anual
+    cliente_id: Optional[str] = None  # Opcional para equipos importados pendientes
+    periodicidad: Optional[str] = None  # mensual, bimensual, trimestral, cuatrimestral, semestral, anual
     fecha_primer_servicio: Optional[str] = None  # ISO date string - fecha desde donde se programan servicios
     en_garantia: bool = False
     fecha_fin_garantia: Optional[str] = None  # ISO date string
+    confirmado: bool = True  # False para equipos importados pendientes de configurar
 
 class EquipoCreate(EquipoBase):
     pass
@@ -143,26 +147,29 @@ async def get_equipos():
 
 @api_router.post("/equipos", response_model=Equipo)
 async def create_equipo(equipo: EquipoCreate):
-    # Verificar que el cliente existe
-    cliente = await db.clientes.find_one({"id": equipo.cliente_id})
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    # Verificar que el cliente existe si se proporciona
+    if equipo.cliente_id:
+        cliente = await db.clientes.find_one({"id": equipo.cliente_id})
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     equipo_obj = Equipo(**equipo.model_dump())
     doc = equipo_obj.model_dump()
     await db.equipos.insert_one(doc)
     
-    # Generar servicios programados
-    await generar_servicios_equipo(equipo_obj)
+    # Solo generar servicios si está confirmado y tiene cliente
+    if equipo_obj.confirmado and equipo_obj.cliente_id and equipo_obj.periodicidad and equipo_obj.fecha_primer_servicio:
+        await generar_servicios_equipo(equipo_obj)
     
     return equipo_obj
 
 @api_router.put("/equipos/{equipo_id}", response_model=Equipo)
 async def update_equipo(equipo_id: str, equipo: EquipoCreate):
-    # Verificar que el cliente existe
-    cliente = await db.clientes.find_one({"id": equipo.cliente_id})
-    if not cliente:
-        raise HTTPException(status_code=404, detail="Cliente no encontrado")
+    # Verificar que el cliente existe si se proporciona
+    if equipo.cliente_id:
+        cliente = await db.clientes.find_one({"id": equipo.cliente_id})
+        if not cliente:
+            raise HTTPException(status_code=404, detail="Cliente no encontrado")
     
     result = await db.equipos.update_one(
         {"id": equipo_id},
@@ -171,12 +178,94 @@ async def update_equipo(equipo_id: str, equipo: EquipoCreate):
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Equipo no encontrado")
     
-    # Eliminar servicios no autorizados y regenerar
-    await db.servicios.delete_many({"equipo_id": equipo_id, "autorizado": False})
     updated = await db.equipos.find_one({"id": equipo_id}, {"_id": 0})
-    await generar_servicios_equipo(Equipo(**updated))
+    equipo_updated = Equipo(**updated)
+    
+    # Solo regenerar servicios si está confirmado y tiene todos los datos necesarios
+    if equipo_updated.confirmado and equipo_updated.cliente_id and equipo_updated.periodicidad and equipo_updated.fecha_primer_servicio:
+        # Eliminar servicios no autorizados y regenerar
+        await db.servicios.delete_many({"equipo_id": equipo_id, "autorizado": False})
+        await generar_servicios_equipo(equipo_updated)
     
     return updated
+
+
+class ImportResult(BaseModel):
+    importados: int
+    errores: List[str]
+
+
+@api_router.post("/equipos/importar", response_model=ImportResult)
+async def importar_equipos(file: UploadFile = File(...)):
+    """Importa equipos desde un archivo Excel (.xlsx)
+    El archivo debe tener columnas: Modelo, Numero de Serie (o No. Serie, Serial)
+    Los equipos se crean en estado pendiente (confirmado=False)
+    """
+    if not file.filename.endswith(('.xlsx', '.xls')):
+        raise HTTPException(status_code=400, detail="El archivo debe ser Excel (.xlsx)")
+    
+    try:
+        contents = await file.read()
+        wb = openpyxl.load_workbook(BytesIO(contents))
+        ws = wb.active
+        
+        # Buscar columnas por nombre (flexible)
+        headers = {str(cell.value).lower().strip() if cell.value else "": idx 
+                   for idx, cell in enumerate(ws[1])}
+        
+        modelo_col = None
+        serie_col = None
+        
+        for name, idx in headers.items():
+            if 'modelo' in name:
+                modelo_col = idx
+            if any(x in name for x in ['serie', 'serial', 'número', 'numero']):
+                serie_col = idx
+        
+        if modelo_col is None or serie_col is None:
+            raise HTTPException(
+                status_code=400, 
+                detail="El archivo debe tener columnas 'Modelo' y 'Numero de Serie' (o similar)"
+            )
+        
+        importados = 0
+        errores = []
+        
+        for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+            try:
+                modelo = str(row[modelo_col]).strip() if row[modelo_col] else None
+                numero_serie = str(row[serie_col]).strip() if row[serie_col] else None
+                
+                if not modelo or not numero_serie or modelo == 'None' or numero_serie == 'None':
+                    continue  # Saltar filas vacías
+                
+                # Verificar si ya existe un equipo con ese número de serie
+                existente = await db.equipos.find_one({"numero_serie": numero_serie})
+                if existente:
+                    errores.append(f"Fila {row_num}: Número de serie '{numero_serie}' ya existe")
+                    continue
+                
+                # Crear equipo en estado pendiente
+                equipo_obj = Equipo(
+                    modelo=modelo,
+                    numero_serie=numero_serie,
+                    cliente_id=None,
+                    periodicidad=None,
+                    fecha_primer_servicio=None,
+                    en_garantia=False,
+                    fecha_fin_garantia=None,
+                    confirmado=False
+                )
+                await db.equipos.insert_one(equipo_obj.model_dump())
+                importados += 1
+                
+            except Exception as e:
+                errores.append(f"Fila {row_num}: {str(e)}")
+        
+        return ImportResult(importados=importados, errores=errores)
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Error al procesar el archivo: {str(e)}")
 
 @api_router.delete("/equipos/{equipo_id}")
 async def delete_equipo(equipo_id: str):
