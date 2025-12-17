@@ -38,6 +38,7 @@ class EquipoBase(BaseModel):
     numero_serie: str
     cliente_id: str
     periodicidad: str  # mensual, bimensual, trimestral, cuatrimestral, semestral, anual
+    fecha_primer_servicio: str  # ISO date string - fecha desde donde se programan servicios
     en_garantia: bool = False
     fecha_fin_garantia: Optional[str] = None  # ISO date string
 
@@ -189,7 +190,7 @@ async def delete_equipo(equipo_id: str):
 
 async def generar_servicios_equipo(equipo: Equipo):
     """Genera los servicios programados para un equipo"""
-    fecha_inicio = datetime.fromisoformat(equipo.fecha_creacion).date()
+    fecha_inicio = date.fromisoformat(equipo.fecha_primer_servicio)
     fechas = calcular_proximas_fechas(fecha_inicio, equipo.periodicidad)
     
     for fecha in fechas:

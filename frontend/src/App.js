@@ -740,6 +740,7 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
     numero_serie: "",
     cliente_id: "",
     periodicidad: "mensual",
+    fecha_primer_servicio: "",
     en_garantia: false,
     fecha_fin_garantia: ""
   });
@@ -751,15 +752,19 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
         numero_serie: equipo.numero_serie,
         cliente_id: equipo.cliente_id,
         periodicidad: equipo.periodicidad,
+        fecha_primer_servicio: equipo.fecha_primer_servicio || "",
         en_garantia: equipo.en_garantia,
         fecha_fin_garantia: equipo.fecha_fin_garantia || ""
       });
     } else {
+      // Por defecto, fecha de hoy
+      const today = new Date().toISOString().split('T')[0];
       setFormData({
         modelo: "",
         numero_serie: "",
         cliente_id: clientes.length > 0 ? clientes[0].id : "",
         periodicidad: "mensual",
+        fecha_primer_servicio: today,
         en_garantia: false,
         fecha_fin_garantia: ""
       });
@@ -768,7 +773,7 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id) return;
+    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id || !formData.fecha_primer_servicio) return;
     onSave({
       ...formData,
       fecha_fin_garantia: formData.en_garantia ? formData.fecha_fin_garantia : null
@@ -830,6 +835,19 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
                   ))}
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label htmlFor="fecha_primer_servicio" className="form-label">Fecha Primer Servicio</Label>
+              <Input
+                id="fecha_primer_servicio"
+                type="date"
+                value={formData.fecha_primer_servicio}
+                onChange={(e) => setFormData({...formData, fecha_primer_servicio: e.target.value})}
+                className="form-input"
+                data-testid="equipo-fecha-primer-servicio-input"
+              />
+              <p className="text-xs text-slate-500 mt-1">Desde esta fecha se programarán los servicios</p>
             </div>
 
             <div>
