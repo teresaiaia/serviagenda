@@ -613,6 +613,7 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
                   <th>Modelo</th>
                   <th>No. Serie</th>
                   <th>Cliente</th>
+                  <th>Primer Servicio</th>
                   <th>Periodicidad</th>
                   <th>Garantía</th>
                   <th className="w-24">Acciones</th>
@@ -624,6 +625,9 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
                     <td className="font-medium">{equipo.modelo}</td>
                     <td className="font-mono text-xs">{equipo.numero_serie}</td>
                     <td>{getClienteNombre(equipo.cliente_id)}</td>
+                    <td className="text-sm">
+                      {equipo.fecha_primer_servicio ? new Date(equipo.fecha_primer_servicio + 'T00:00:00').toLocaleDateString('es-ES') : '-'}
+                    </td>
                     <td>
                       <span className="badge badge-info">{getPeriodicidadLabel(equipo.periodicidad)}</span>
                     </td>
