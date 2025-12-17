@@ -1,0 +1,116 @@
+{
+  "total_tests": 18,
+  "passed_tests": 17,
+  "failed_tests": 1,
+  "success_rate": 94.44444444444444,
+  "test_results": [
+    {
+      "test_name": "API Health Check",
+      "success": true,
+      "details": "Status: 200",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Clientes (empty)",
+      "success": true,
+      "details": "Status: 200, Count: 1",
+      "response_data": null
+    },
+    {
+      "test_name": "POST Cliente",
+      "success": true,
+      "details": "Created cliente with ID: ea194d69-7909-4eb0-82af-4df855c5cf64",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Clientes (with data)",
+      "success": false,
+      "details": "Expected 1 cliente, got: [{'nombre': 'Younique', 'id': 'd8799872-845b-4174-afed-f0b8c05da5cd'}, {'nombre': 'Hospital San Juan', 'id': 'ea194d69-7909-4eb0-82af-4df855c5cf64'}]",
+      "response_data": null
+    },
+    {
+      "test_name": "PUT Cliente",
+      "success": true,
+      "details": "Updated cliente name to: Hospital San Juan Actualizado",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Equipos (empty)",
+      "success": true,
+      "details": "Status: 200, Count: 0",
+      "response_data": null
+    },
+    {
+      "test_name": "POST Equipo",
+      "success": true,
+      "details": "Created equipo with ID: a6eecfe9-5dc8-4740-a2f6-a730c330a5a4",
+      "response_data": null
+    },
+    {
+      "test_name": "Service Auto-Generation",
+      "success": true,
+      "details": "Generated 13 services for monthly equipment",
+      "response_data": null
+    },
+    {
+      "test_name": "POST Equipo (trimestral)",
+      "success": true,
+      "details": "Created trimestral equipo",
+      "response_data": null
+    },
+    {
+      "test_name": "PUT Equipo (change periodicity)",
+      "success": true,
+      "details": "Updated equipment periodicity",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Servicios",
+      "success": true,
+      "details": "Retrieved 12 services",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Pr\u00f3ximos Servicios",
+      "success": true,
+      "details": "Retrieved 12 upcoming services",
+      "response_data": null
+    },
+    {
+      "test_name": "GET Calendario Mensual",
+      "success": true,
+      "details": "Retrieved 2 services for 2025/12",
+      "response_data": null
+    },
+    {
+      "test_name": "PUT Autorizar Servicio",
+      "success": true,
+      "details": "Service authorized successfully",
+      "response_data": null
+    },
+    {
+      "test_name": "PUT Desautorizar Servicio",
+      "success": true,
+      "details": "Service unauthorized successfully",
+      "response_data": null
+    },
+    {
+      "test_name": "Validation: Non-existent Cliente",
+      "success": true,
+      "details": "Correctly rejected invalid cliente_id",
+      "response_data": null
+    },
+    {
+      "test_name": "Validation: Update Non-existent Cliente",
+      "success": true,
+      "details": "Correctly rejected non-existent cliente",
+      "response_data": null
+    },
+    {
+      "test_name": "Validation: Delete Cliente with Equipos",
+      "success": true,
+      "details": "Correctly prevented deletion of cliente with equipos",
+      "response_data": null
+    }
+  ]
+}
