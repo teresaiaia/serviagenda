@@ -16,9 +16,11 @@ import {
   Shield,
   AlertCircle,
   Search,
-  ArrowUpDown,
   ArrowUp,
-  ArrowDown
+  ArrowDown,
+  Upload,
+  Clock,
+  CheckCircle2
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -323,6 +325,23 @@ function App() {
                   toast.error("Error al eliminar el equipo");
                 }
               }}
+              onImport={async (file) => {
+                try {
+                  const formData = new FormData();
+                  formData.append('file', file);
+                  const res = await axios.post(`${API}/equipos/importar`, formData, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                  });
+                  toast.success(`${res.data.importados} equipos importados`);
+                  if (res.data.errores.length > 0) {
+                    res.data.errores.forEach(err => toast.warning(err));
+                  }
+                  fetchData();
+                } catch (error) {
+                  toast.error(error.response?.data?.detail || "Error al importar");
+                }
+              }}
+              onRefresh={() => { fetchData(); fetchServiciosMes(); }}
             />
           )}
         </main>
@@ -637,21 +656,29 @@ function ClientesView({ clientes, equipos, searchTerm, sortOrder, onToggleSort, 
 }
 
 // ==================== EQUIPOS VIEW ====================
-function EquiposView({ equipos, clientes, searchTerm, sortOrder, onToggleSort, onAdd, onEdit, onDelete }) {
+function EquiposView({ equipos, clientes, searchTerm, sortOrder, onToggleSort, onAdd, onEdit, onDelete, onImport, onRefresh }) {
+  const fileInputRef = React.useRef(null);
+  
   const getClienteNombre = (clienteId) => {
+    if (!clienteId) return null;
     const cliente = clientes.find(c => c.id === clienteId);
     return cliente ? cliente.nombre : "Desconocido";
   };
 
   const getPeriodicidadLabel = (value) => {
+    if (!value) return null;
     const p = PERIODICIDADES.find(p => p.value === value);
     return p ? p.label : value;
   };
 
+  // Separar equipos confirmados y pendientes
+  const equiposPendientes = equipos.filter(e => !e.confirmado);
+  const equiposConfirmados = equipos.filter(e => e.confirmado);
+
   // Filtrar por búsqueda (modelo, número de serie, o nombre de cliente)
-  const filteredEquipos = equipos.filter(equipo => {
+  const filteredEquipos = equiposConfirmados.filter(equipo => {
     const term = searchTerm.toLowerCase();
-    const clienteNombre = getClienteNombre(equipo.cliente_id).toLowerCase();
+    const clienteNombre = (getClienteNombre(equipo.cliente_id) || "").toLowerCase();
     return equipo.modelo.toLowerCase().includes(term) ||
            equipo.numero_serie.toLowerCase().includes(term) ||
            clienteNombre.includes(term);
@@ -663,18 +690,92 @@ function EquiposView({ equipos, clientes, searchTerm, sortOrder, onToggleSort, o
     return sortOrder === "asc" ? comparison : -comparison;
   });
 
+  const handleFileChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      onImport(file);
+      e.target.value = ''; // Reset input
+    }
+  };
+
   return (
     <div data-testid="equipos-view">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <h2 className="font-heading font-bold text-xl text-slate-900">
           Equipos
           {searchTerm && <span className="text-sm font-normal text-slate-500 ml-2">({sortedEquipos.length} resultados)</span>}
         </h2>
-        <Button onClick={onAdd} className="btn-primary" data-testid="add-equipo-btn">
-          <Plus className="w-4 h-4 mr-2" />
-          Nuevo Equipo
-        </Button>
+        <div className="flex gap-2">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileChange}
+            accept=".xlsx,.xls"
+            className="hidden"
+            data-testid="import-file-input"
+          />
+          <Button 
+            variant="outline" 
+            onClick={() => fileInputRef.current?.click()}
+            data-testid="import-excel-btn"
+          >
+            <Upload className="w-4 h-4 mr-2" />
+            Importar Excel
+          </Button>
+          <Button onClick={onAdd} className="btn-primary" data-testid="add-equipo-btn">
+            <Plus className="w-4 h-4 mr-2" />
+            Nuevo Equipo
+          </Button>
+        </div>
       </div>
+
+      {/* Equipos pendientes de configurar */}
+      {equiposPendientes.length > 0 && (
+        <div className="mb-6 bg-amber-50 border border-amber-200 rounded-xl p-4" data-testid="equipos-pendientes">
+          <div className="flex items-center gap-2 mb-3">
+            <Clock className="w-5 h-5 text-amber-600" />
+            <h3 className="font-semibold text-amber-800">
+              Equipos pendientes de configurar ({equiposPendientes.length})
+            </h3>
+          </div>
+          <p className="text-sm text-amber-700 mb-3">
+            Estos equipos fueron importados y necesitan asignar cliente, periodicidad y fecha de primer servicio.
+          </p>
+          <div className="space-y-2">
+            {equiposPendientes.map(equipo => (
+              <div 
+                key={equipo.id}
+                className="flex items-center justify-between bg-white rounded-lg p-3 border border-amber-200"
+                data-testid={`equipo-pendiente-${equipo.id}`}
+              >
+                <div>
+                  <p className="font-medium text-slate-900">{equipo.modelo}</p>
+                  <p className="text-sm text-slate-500 font-mono">{equipo.numero_serie}</p>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    size="sm"
+                    onClick={() => onEdit(equipo)}
+                    className="bg-amber-500 hover:bg-amber-600 text-white"
+                    data-testid={`configurar-equipo-${equipo.id}`}
+                  >
+                    <Edit2 className="w-4 h-4 mr-1" />
+                    Configurar
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => onDelete(equipo.id)}
+                    className="text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {clientes.length === 0 ? (
         <div className="empty-state bg-white rounded-xl border border-slate-200 py-12">
