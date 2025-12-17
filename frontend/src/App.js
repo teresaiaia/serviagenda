@@ -952,19 +952,23 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
     periodicidad: "mensual",
     fecha_primer_servicio: "",
     en_garantia: false,
-    fecha_fin_garantia: ""
+    fecha_fin_garantia: "",
+    confirmado: true
   });
+
+  const isPendiente = equipo && !equipo.confirmado;
 
   useEffect(() => {
     if (equipo) {
       setFormData({
         modelo: equipo.modelo,
         numero_serie: equipo.numero_serie,
-        cliente_id: equipo.cliente_id,
-        periodicidad: equipo.periodicidad,
+        cliente_id: equipo.cliente_id || "",
+        periodicidad: equipo.periodicidad || "mensual",
         fecha_primer_servicio: equipo.fecha_primer_servicio || "",
-        en_garantia: equipo.en_garantia,
-        fecha_fin_garantia: equipo.fecha_fin_garantia || ""
+        en_garantia: equipo.en_garantia || false,
+        fecha_fin_garantia: equipo.fecha_fin_garantia || "",
+        confirmado: equipo.confirmado
       });
     } else {
       // Por defecto, fecha de hoy
@@ -976,16 +980,21 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
         periodicidad: "mensual",
         fecha_primer_servicio: today,
         en_garantia: false,
-        fecha_fin_garantia: ""
+        fecha_fin_garantia: "",
+        confirmado: true
       });
     }
   }, [equipo, clientes, open]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id || !formData.fecha_primer_servicio) return;
+    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id || !formData.fecha_primer_servicio || !formData.periodicidad) {
+      toast.error("Completa todos los campos requeridos");
+      return;
+    }
     onSave({
       ...formData,
+      confirmado: true, // Al guardar, siempre confirmamos
       fecha_fin_garantia: formData.en_garantia ? formData.fecha_fin_garantia : null
     });
   };
@@ -994,11 +1003,14 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle className="font-heading">
-            {equipo ? "Editar Equipo" : "Nuevo Equipo"}
+          <DialogTitle className="font-heading flex items-center gap-2">
+            {isPendiente && <Clock className="w-5 h-5 text-amber-500" />}
+            {equipo ? (isPendiente ? "Configurar Equipo Importado" : "Editar Equipo") : "Nuevo Equipo"}
           </DialogTitle>
           <DialogDescription>
-            {equipo ? "Modifica los datos del equipo" : "Ingresa los datos del equipo médico"}
+            {isPendiente 
+              ? "Asigna cliente, periodicidad y fecha de primer servicio para activar este equipo"
+              : (equipo ? "Modifica los datos del equipo" : "Ingresa los datos del equipo médico")}
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit}>
@@ -1110,8 +1122,13 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
             <Button type="button" variant="outline" onClick={onClose}>
               Cancelar
             </Button>
-            <Button type="submit" className="btn-primary" data-testid="save-equipo-btn">
-              {equipo ? "Guardar" : "Crear"}
+            <Button type="submit" className={isPendiente ? "bg-amber-500 hover:bg-amber-600" : "btn-primary"} data-testid="save-equipo-btn">
+              {isPendiente ? (
+                <>
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirmar y Activar
+                </>
+              ) : (equipo ? "Guardar" : "Crear")}
             </Button>
           </DialogFooter>
         </form>
