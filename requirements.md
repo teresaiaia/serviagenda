@@ -35,6 +35,7 @@ Sistema de programación de servicios técnicos de mantenimiento preventivo para
 - ✅ CRUD de clientes
 - ✅ CRUD de equipos médicos
 - ✅ Generación automática de servicios según periodicidad
+- ✅ **Fecha primer servicio configurable** - permite definir desde qué fecha programar los mantenimientos
 - ✅ Calendario mensual con visualización de servicios
 - ✅ Lista de próximos servicios
 - ✅ Autorización de servicios

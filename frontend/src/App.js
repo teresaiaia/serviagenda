@@ -151,7 +151,10 @@ function App() {
 
   const formatDate = (dateStr) => {
     const date = new Date(dateStr + 'T00:00:00');
-    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = String(date.getFullYear()).slice(-2);
+    return `${day}/${month}/${year}`;
   };
 
   if (loading) {
@@ -411,18 +414,18 @@ function CalendarioView({ currentDate, servicios, proximosServicios, onPrevMonth
                       {day}
                     </div>
                     <div className="space-y-0.5 overflow-hidden max-h-[45px]">
-                      {serviciosDay.slice(0, 3).map(servicio => (
+                      {serviciosDay.slice(0, 2).map(servicio => (
                         <div 
                           key={servicio.id}
                           className={`service-badge ${servicio.autorizado ? 'authorized' : 'pending'}`}
-                          title={`${servicio.equipo_modelo} - ${servicio.cliente_nombre}`}
+                          title={`${servicio.cliente_nombre} - ${servicio.equipo_modelo}`}
                         >
-                          {servicio.equipo_modelo}
+                          {servicio.cliente_nombre} - {servicio.equipo_modelo}
                         </div>
                       ))}
-                      {serviciosDay.length > 3 && (
+                      {serviciosDay.length > 2 && (
                         <div className="text-[9px] text-slate-500 font-medium">
-                          +{serviciosDay.length - 3} más
+                          +{serviciosDay.length - 2} más
                         </div>
                       )}
                     </div>
@@ -626,7 +629,10 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
                     <td className="font-mono text-xs">{equipo.numero_serie}</td>
                     <td>{getClienteNombre(equipo.cliente_id)}</td>
                     <td className="text-sm">
-                      {equipo.fecha_primer_servicio ? new Date(equipo.fecha_primer_servicio + 'T00:00:00').toLocaleDateString('es-ES') : '-'}
+                      {equipo.fecha_primer_servicio ? (() => {
+                        const d = new Date(equipo.fecha_primer_servicio + 'T00:00:00');
+                        return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+                      })() : '-'}
                     </td>
                     <td>
                       <span className="badge badge-info">{getPeriodicidadLabel(equipo.periodicidad)}</span>
@@ -640,7 +646,10 @@ function EquiposView({ equipos, clientes, onAdd, onEdit, onDelete }) {
                           </span>
                           {equipo.fecha_fin_garantia && (
                             <p className="text-xs text-slate-500 mt-1">
-                              Hasta: {new Date(equipo.fecha_fin_garantia).toLocaleDateString('es-ES')}
+                              Hasta: {(() => {
+                                const d = new Date(equipo.fecha_fin_garantia + 'T00:00:00');
+                                return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${String(d.getFullYear()).slice(-2)}`;
+                              })()}
                             </p>
                           )}
                         </div>
