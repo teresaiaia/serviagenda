@@ -988,13 +988,14 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id || !formData.fecha_primer_servicio || !formData.periodicidad) {
-      toast.error("Completa todos los campos requeridos");
+    if (!formData.modelo.trim() || !formData.numero_serie.trim() || !formData.cliente_id || !formData.periodicidad) {
+      toast.error("Completa los campos requeridos: Modelo, No. Serie, Cliente y Periodicidad");
       return;
     }
     onSave({
       ...formData,
       confirmado: true, // Al guardar, siempre confirmamos
+      fecha_primer_servicio: formData.fecha_primer_servicio || null,
       fecha_fin_garantia: formData.en_garantia ? formData.fecha_fin_garantia : null
     });
   };
@@ -1060,7 +1061,9 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
             </div>
 
             <div>
-              <Label htmlFor="fecha_primer_servicio" className="form-label">Fecha Primer Servicio</Label>
+              <Label htmlFor="fecha_primer_servicio" className="form-label">
+                Fecha Primer Servicio <span className="text-slate-400 font-normal">(opcional)</span>
+              </Label>
               <Input
                 id="fecha_primer_servicio"
                 type="date"
@@ -1069,7 +1072,11 @@ function EquipoModal({ open, onClose, equipo, clientes, onSave }) {
                 className="form-input"
                 data-testid="equipo-fecha-primer-servicio-input"
               />
-              <p className="text-xs text-slate-500 mt-1">Desde esta fecha se programarán los servicios</p>
+              <p className="text-xs text-slate-500 mt-1">
+                {formData.fecha_primer_servicio 
+                  ? "Desde esta fecha se programarán los servicios" 
+                  : "Sin fecha, el equipo no tendrá servicios programados aún"}
+              </p>
             </div>
 
             <div>
