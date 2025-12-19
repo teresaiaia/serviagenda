@@ -10,8 +10,11 @@ const ClientesView = () => {
   const [selectedCliente, setSelectedCliente] = useState(null);
   const [showAddEquipo, setShowAddEquipo] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editingEquipo, setEditingEquipo] = useState(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+  const [sortConfig, setSortConfig] = useState({ key: 'modelo', direction: 'asc' });
 
-  // Form state
   const [formData, setFormData] = useState({
     modelo: '',
     numero_serie: '',
@@ -32,7 +35,6 @@ const ClientesView = () => {
 
       if (error) throw error;
 
-      // Extraer clientes únicos
       const clientesUnicos = [...new Set(data.map(e => e.cliente))].map(nombre => ({
         nombre,
         equipos: data.filter(e => e.cliente === nombre).length
@@ -48,13 +50,70 @@ const ClientesView = () => {
   };
 
   const getEquiposDelCliente = (nombreCliente) => {
-    return equipos.filter(e => e.cliente === nombreCliente);
+    let equiposCliente = equipos.filter(e => e.cliente === nombreCliente);
+
+    const sorted = [...equiposCliente].sort((a, b) => {
+      let aValue = a[sortConfig.key];
+      let bValue = b[sortConfig.key];
+
+      if (sortConfig.key === 'periodicidad') {
+        const periodicidadOrder = {
+          'Mensual': 1,
+          'Bimestral': 2,
+          'Trimestral': 3,
+          'Cuatrimestral': 4,
+          'Semestral': 5,
+          'Anual': 6
+        };
+        aValue = periodicidadOrder[aValue] || 999;
+        bValue = periodicidadOrder[bValue] || 999;
+      }
+
+      if (aValue === null || aValue === undefined) return 1;
+      if (bValue === null || bValue === undefined) return -1;
+
+      if (typeof aValue === 'string') {
+        aValue = aValue.toLowerCase();
+        bValue = bValue.toLowerCase();
+      }
+
+      if (aValue < bValue) return sortConfig.direction === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortConfig.direction === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    return sorted;
+  };
+
+  const handleSort = (key) => {
+    setSortConfig(prev => ({
+      key,
+      direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+    }));
+  };
+
+  const getSortIcon = (key) => {
+    if (sortConfig.key !== key) {
+      return (
+        <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+        </svg>
+      );
+    }
+    return sortConfig.direction === 'asc' ? (
+      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+      </svg>
+    ) : (
+      <svg className="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+      </svg>
+    );
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Calcular fecha de garantía (1 año desde instalación)
     const fechaInstalacion = parseISO(formData.fecha_instalacion);
     const fechaGarantia = addYears(fechaInstalacion, 1);
     const enGarantia = new Date() < fechaGarantia;
@@ -76,17 +135,14 @@ const ClientesView = () => {
 
       if (error) throw error;
 
-      // Actualizar estado local
       setEquipos([...equipos, data[0]]);
       
-      // Actualizar contador del cliente
       const clienteActualizado = clientes.find(c => c.nombre === selectedCliente);
       if (clienteActualizado) {
         clienteActualizado.equipos += 1;
         setClientes([...clientes]);
       }
 
-      // Resetear formulario
       setFormData({
         modelo: '',
         numero_serie: '',
@@ -99,6 +155,76 @@ const ClientesView = () => {
     } catch (error) {
       console.error('Error adding equipo:', error);
       alert('Error al agregar equipo: ' + error.message);
+    }
+  };
+
+  const handleEdit = (equipo) => {
+    setEditingEquipo({ ...equipo });
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      const { error } = await supabase
+        .from('equipos')
+        .update({
+          cliente: editingEquipo.cliente,
+          modelo: editingEquipo.modelo,
+          numero_serie: editingEquipo.numero_serie,
+          periodicidad: editingEquipo.periodicidad,
+          fecha_primer_servicio: editingEquipo.fecha_primer_servicio,
+          en_garantia: editingEquipo.en_garantia
+        })
+        .eq('id', editingEquipo.id);
+
+      if (error) throw error;
+
+      // Actualizar equipos
+      setEquipos(equipos.map(e => e.id === editingEquipo.id ? editingEquipo : e));
+
+      // Si cambió el cliente, actualizar contadores
+      const equipoOriginal = equipos.find(e => e.id === editingEquipo.id);
+      if (equipoOriginal.cliente !== editingEquipo.cliente) {
+        await fetchData(); // Recargar todo para actualizar contadores
+      }
+
+      setShowEditModal(false);
+      setEditingEquipo(null);
+    } catch (error) {
+      console.error('Error updating equipo:', error);
+      alert('Error al actualizar equipo: ' + error.message);
+    }
+  };
+
+  const handleDelete = async (equipoId) => {
+    try {
+      const equipo = equipos.find(e => e.id === equipoId);
+      
+      const { error } = await supabase
+        .from('equipos')
+        .delete()
+        .eq('id', equipoId);
+
+      if (error) throw error;
+
+      setEquipos(equipos.filter(e => e.id !== equipoId));
+      
+      // Actualizar contador del cliente
+      const cliente = clientes.find(c => c.nombre === equipo.cliente);
+      if (cliente) {
+        cliente.equipos -= 1;
+        if (cliente.equipos === 0) {
+          setClientes(clientes.filter(c => c.nombre !== equipo.cliente));
+          setSelectedCliente(null);
+        } else {
+          setClientes([...clientes]);
+        }
+      }
+
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error('Error deleting equipo:', error);
+      alert('Error al eliminar equipo: ' + error.message);
     }
   };
 
@@ -153,7 +279,6 @@ const ClientesView = () => {
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
-        {/* Header */}
         <div className="bg-white border-b px-8 py-6">
           <div className="flex items-center justify-between mb-4">
             <h1 className="text-3xl font-normal">Clientes</h1>
@@ -175,7 +300,6 @@ const ClientesView = () => {
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 overflow-auto">
           <div className="flex h-full">
             {/* Lista de Clientes */}
@@ -312,11 +436,39 @@ const ClientesView = () => {
                     <table className="min-w-full">
                       <thead className="bg-gray-50 border-b">
                         <tr>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Modelo</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">No. Serie</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Periodicidad</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instalación</th>
-                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Garantía</th>
+                          <th onClick={() => handleSort('modelo')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                            <div className="flex items-center space-x-1">
+                              <span>Modelo</span>
+                              {getSortIcon('modelo')}
+                            </div>
+                          </th>
+                          <th onClick={() => handleSort('numero_serie')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                            <div className="flex items-center space-x-1">
+                              <span>No. Serie</span>
+                              {getSortIcon('numero_serie')}
+                            </div>
+                          </th>
+                          <th onClick={() => handleSort('periodicidad')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                            <div className="flex items-center space-x-1">
+                              <span>Periodicidad</span>
+                              {getSortIcon('periodicidad')}
+                            </div>
+                          </th>
+                          <th onClick={() => handleSort('fecha_primer_servicio')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                            <div className="flex items-center space-x-1">
+                              <span>Instalación</span>
+                              {getSortIcon('fecha_primer_servicio')}
+                            </div>
+                          </th>
+                          <th onClick={() => handleSort('en_garantia')} className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer hover:bg-gray-100">
+                            <div className="flex items-center space-x-1">
+                              <span>Garantía</span>
+                              {getSortIcon('en_garantia')}
+                            </div>
+                          </th>
+                          <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
+                            Acciones
+                          </th>
                         </tr>
                       </thead>
                       <tbody className="divide-y">
@@ -343,6 +495,28 @@ const ClientesView = () => {
                                 {equipo.en_garantia ? 'Sí' : 'No'}
                               </span>
                             </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm">
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={() => handleEdit(equipo)}
+                                  className="text-blue-600 hover:text-blue-800"
+                                  title="Editar"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  onClick={() => setShowDeleteConfirm(equipo)}
+                                  className="text-red-600 hover:text-red-800"
+                                  title="Eliminar"
+                                >
+                                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -354,6 +528,136 @@ const ClientesView = () => {
           </div>
         </div>
       </div>
+
+      {/* Modal Editar Equipo */}
+      {showEditModal && editingEquipo && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-xl font-semibold mb-4">Editar Equipo</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                <input
+                  type="text"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={editingEquipo.cliente}
+                  onChange={(e) => setEditingEquipo({ ...editingEquipo, cliente: e.target.value })}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Modelo</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editingEquipo.modelo}
+                    onChange={(e) => setEditingEquipo({ ...editingEquipo, modelo: e.target.value })}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Número de Serie</label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editingEquipo.numero_serie}
+                    onChange={(e) => setEditingEquipo({ ...editingEquipo, numero_serie: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Periodicidad</label>
+                  <select
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editingEquipo.periodicidad}
+                    onChange={(e) => setEditingEquipo({ ...editingEquipo, periodicidad: e.target.value })}
+                  >
+                    <option value="Mensual">Mensual</option>
+                    <option value="Bimestral">Bimestral</option>
+                    <option value="Trimestral">Trimestral</option>
+                    <option value="Cuatrimestral">Cuatrimestral</option>
+                    <option value="Semestral">Semestral</option>
+                    <option value="Anual">Anual</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Fecha Instalación</label>
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={editingEquipo.fecha_primer_servicio || ''}
+                    onChange={(e) => setEditingEquipo({ ...editingEquipo, fecha_primer_servicio: e.target.value })}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="flex items-center space-x-2">
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                    checked={editingEquipo.en_garantia}
+                    onChange={(e) => setEditingEquipo({ ...editingEquipo, en_garantia: e.target.checked })}
+                  />
+                  <span className="text-sm font-medium text-gray-700">En Garantía</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={handleSaveEdit}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Guardar Cambios
+              </button>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingEquipo(null);
+                }}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Confirmar Eliminación */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+            <h3 className="text-xl font-semibold mb-4">Confirmar Eliminación</h3>
+            <p className="text-gray-600 mb-6">
+              ¿Estás seguro que deseas eliminar el equipo <strong>{showDeleteConfirm.modelo}</strong> (S/N: {showDeleteConfirm.numero_serie})?
+            </p>
+            <p className="text-sm text-red-600 mb-6">
+              Esta acción no se puede deshacer.
+            </p>
+            <div className="flex space-x-3">
+              <button
+                onClick={() => handleDelete(showDeleteConfirm.id)}
+                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+              >
+                Eliminar
+              </button>
+              <button
+                onClick={() => setShowDeleteConfirm(null)}
+                className="px-4 py-2 border border-gray-300 rounded-lg hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
