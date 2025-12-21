@@ -8,32 +8,46 @@ const CalendarioView = () => {
   const [currentDate, setCurrentDate] = useState(new Date(2026, 0, 1));
   const [equipos, setEquipos] = useState([]);
   const [servicios, setServicios] = useState([]);
+  const [serviciosDB, setServiciosDB] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [selectedServicio, setSelectedServicio] = useState(null);
   const [showModal, setShowModal] = useState(false);
 
   useEffect(() => {
-    fetchEquipos();
+    fetchData();
   }, []);
 
   useEffect(() => {
     if (equipos.length > 0) {
       calcularServicios();
     }
-  }, [equipos, currentDate]);
+  }, [equipos, serviciosDB, currentDate]);
 
-  const fetchEquipos = async () => {
+  const fetchData = async () => {
     try {
-      const { data, error } = await supabase
+      // Fetch equipos
+      const { data: equiposData, error: equiposError } = await supabase
         .from('equipos')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      setEquipos(data || []);
+      if (equiposError) throw equiposError;
+
+      // Fetch servicios de la base de datos
+      const { data: serviciosData, error: serviciosError } = await supabase
+        .from('servicios')
+        .select('*');
+
+      if (serviciosError && serviciosError.code !== 'PGRST116') {
+        // PGRST116 = tabla no existe, lo ignoramos
+        console.error('Error fetching servicios:', serviciosError);
+      }
+
+      setEquipos(equiposData || []);
+      setServiciosDB(serviciosData || []);
     } catch (error) {
-      console.error('Error fetching equipos:', error);
+      console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
     }
@@ -41,29 +55,33 @@ const CalendarioView = () => {
 
   const calcularServicios = () => {
     const serviciosCalculados = [];
-    const monthStart = startOfMonth(currentDate);
-    const monthEnd = endOfMonth(currentDate);
+    const fechaLimite = addMonths(currentDate, 12);
 
     equipos.forEach(equipo => {
       if (!equipo.fecha_primer_servicio) return;
 
       const fechaInicio = parseISO(equipo.fecha_primer_servicio);
       let fechaServicio = new Date(fechaInicio);
-      
-      const fechaLimite = addMonths(currentDate, 12);
 
       while (fechaServicio <= fechaLimite) {
-        const autorizado = Math.random() > 0.3;
+        const fechaStr = format(fechaServicio, 'yyyy-MM-dd');
         
+        // Buscar si existe en la BD
+        const servicioEnDB = serviciosDB.find(
+          s => s.equipo_id === equipo.id && s.fecha === fechaStr
+        );
+
         serviciosCalculados.push({
           id: `${equipo.id}-${fechaServicio.toISOString()}`,
+          servicio_db_id: servicioEnDB?.id,
           equipo_id: equipo.id,
           cliente: equipo.cliente,
           modelo: equipo.modelo,
           numero_serie: equipo.numero_serie,
           fecha: fechaServicio,
           periodicidad: equipo.periodicidad,
-          autorizado: autorizado
+          autorizado: servicioEnDB?.autorizado || false, // Por defecto: NO autorizado
+          completado: servicioEnDB?.completado || false
         });
 
         switch (equipo.periodicidad?.toLowerCase()) {
@@ -99,17 +117,63 @@ const CalendarioView = () => {
     setShowModal(true);
   };
 
-  const toggleAutorizacion = () => {
+  const toggleAutorizacion = async () => {
     if (!selectedServicio) return;
 
-    const serviciosActualizados = servicios.map(s => 
-      s.id === selectedServicio.id 
-        ? { ...s, autorizado: !s.autorizado }
-        : s
-    );
-    
-    setServicios(serviciosActualizados);
-    setSelectedServicio({ ...selectedServicio, autorizado: !selectedServicio.autorizado });
+    const nuevoEstado = !selectedServicio.autorizado;
+    const fechaStr = format(selectedServicio.fecha, 'yyyy-MM-dd');
+
+    try {
+      if (selectedServicio.servicio_db_id) {
+        // Actualizar servicio existente
+        const { error } = await supabase
+          .from('servicios')
+          .update({ autorizado: nuevoEstado })
+          .eq('id', selectedServicio.servicio_db_id);
+
+        if (error) throw error;
+      } else {
+        // Crear nuevo servicio
+        const { data, error } = await supabase
+          .from('servicios')
+          .insert([{
+            equipo_id: selectedServicio.equipo_id,
+            fecha: fechaStr,
+            autorizado: nuevoEstado,
+            completado: false
+          }])
+          .select();
+
+        if (error) throw error;
+
+        // Actualizar serviciosDB
+        if (data && data.length > 0) {
+          setServiciosDB([...serviciosDB, data[0]]);
+        }
+      }
+
+      // Actualizar estado local
+      const serviciosActualizados = servicios.map(s => 
+        s.id === selectedServicio.id 
+          ? { ...s, autorizado: nuevoEstado }
+          : s
+      );
+      
+      setServicios(serviciosActualizados);
+      setSelectedServicio({ ...selectedServicio, autorizado: nuevoEstado });
+
+      // Si ya existía, actualizar serviciosDB
+      if (selectedServicio.servicio_db_id) {
+        setServiciosDB(serviciosDB.map(s =>
+          s.id === selectedServicio.servicio_db_id
+            ? { ...s, autorizado: nuevoEstado }
+            : s
+        ));
+      }
+    } catch (error) {
+      console.error('Error updating servicio:', error);
+      alert('Error al actualizar el servicio: ' + error.message);
+    }
   };
 
   const getServiciosDelDia = (dia) => {
